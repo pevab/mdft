@@ -2,6 +2,7 @@ using DrWatson
 @quickactivate "mdft"
 
 using Plots
+using NNlib
 using Distributions
 
 #=
@@ -103,29 +104,32 @@ Examples
 
 function similarity_effect()
     model = MDFT(
-        3,
-        2,
-        [ 
+        3, # alternatives (cars) A S B
+        2, # attributes E (economy) and Q (quality)
+        [ # personal evaluation matrix M
             # E     Q
             1.00  3.00; # A
             1.25  2.8; # S
             3.00  1.00; # B
         ],
+        # attention weight process
         BernoulliAttentionProcess([.45, .45]),
-        [
+        [ # contrast matrix C
             1 -0.5 -0.5;
             -0.5 1 -0.5;
             -0.5 -0.5 1;
         ],
+        # residual error law
         Dirac(0),
-        [
+        [ # feedback matrix S
             .940 .000 .000;
             .000 .940 .000;
             .000 .000 .940;
         ]
     )
     function winner(p :: Vector{Float64}) :: Vector{Float64}
-        _, w = findmax(p)
+        probs = softmax(p)
+        w = rand(Categorical(probs))
         r = zeros(3)
         r[w] = 1
         r

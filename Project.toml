@@ -3,6 +3,7 @@ name = "mdft"
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
+NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 
 [compat]
 DrWatson = "2.18.0"

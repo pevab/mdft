@@ -1,19 +1,32 @@
 using DrWatson
 @quickactivate "mdft"
 
-# Here you may include files from the source directory
-include(srcdir("dummy_src_file.jl"))
+using Distributions
 
-println(
-"""
-Currently active project is: $(projectname())
+abstract type  AttentionProcess
+end
 
-Path of active project: $(projectdir())
+struct BernoulliAttentionProcess <: AttentionProcess
+    probabilities :: Vector{Float64}
+end
 
-Have fun with your new project!
+function next(process :: BernoulliAttentionProcess) :: Vector{Float64}
+    probabilities = process.probabilities
+    n_attributes = length(probabilities)
+    result = zeros(n_attributes)
+    for a in 1:n_attributes
+        p = probabilities[a]
+        result[a] = rand(Bernoulli(p))
+    end
+    result
+end
 
-You can help us improve DrWatson by opening
-issues on GitHub, submitting feature requests,
-or even opening your own Pull Requests!
-"""
-)
+
+struct MDFT 
+    n_alternatives :: Int64
+    n_attributes :: Int64
+    personal_evaluation :: Matrix{Float64}
+    attention_process :: AttentionProcess
+    contrast_matrix :: Matrix{Float64}
+    feedback_matrix :: Matrix{Float64}
+end

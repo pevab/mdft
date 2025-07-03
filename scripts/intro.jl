@@ -293,3 +293,79 @@ function attraction_effect()
     # plot
     plot(plt_ab, plt_adb, layout=(1,2))
 end
+
+function compromise_effect()
+    max_time = 200
+    n_seeds = 1000
+    attention_process = BernoulliAttentionProcess([.50, .50])
+    measure_ab = Measure(
+        MDFT(
+            2, # alternatives (cars) A B
+            2, # attributes E (economy) and Q (quality)
+            [ # personal evaluation matrix M
+                # E     Q
+                1.00  3.00; # A
+                3.00  1.00; # B
+            ],
+            # attention weight process
+            attention_process,
+            # contrast matrix
+            contrast_matrix(2),
+            # residual error law
+            Dirac(0),
+            sym([ # feedback matrix S
+                .940 .000;
+                .000 .940;
+            ])
+        ),
+        n_seeds,
+        max_time,
+    )
+    measure_acb = Measure(
+        MDFT(
+            3, # alternatives (cars) A C B
+            2, # attributes E (economy) and Q (quality)
+            [ # personal evaluation matrix M
+                # E     Q
+                1.00  3.00; # A
+                2.00  2.00; # C
+                3.00  1.00; # B
+            ],
+            # attention weight process
+            attention_process,
+            # contrast matrix
+            contrast_matrix(3),
+            # residual error law
+            Dirac(0),
+            # sym([ # feedback matrix S
+            #     .940 -0.025 -0.010;
+            #     .000   .940 -0.010;
+            #     .000   .000   .940;
+            # ])
+            sym([ # feedback matrix S
+                .940 -0.200 -0.000;
+                .000   .940 -0.199;
+                .000   .000   .940;
+            ])
+        ),
+        n_seeds,
+        max_time,
+    )
+
+    # AB
+    results_ab = run_measure(measure_ab)
+    mean_ab = map(r -> r.mean, results_ab)
+    lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
+    hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
+    plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
+
+    # ACB
+    results_acb = run_measure(measure_acb)
+    mean_acb = map(r -> r.mean, results_acb)
+    lo_acb = map(r -> r.mean - 0.67*r.std, results_ab)
+    hi_acb = map(r -> r.mean + 0.67*r.std, results_ab)
+    plt_acb = plot(mean_acb', ribbon=[lo_acb hi_acb], linecolor=[:blue :red :green], labels=['A' 'C' 'B'], ylim=(0,1))
+
+    # plot
+    plot(plt_ab, plt_acb, layout=(1,2))
+end

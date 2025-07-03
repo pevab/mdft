@@ -191,9 +191,9 @@ function similarity_effect()
             # residual error law
             Dirac(0),
             sym([ # feedback matrix S
-                .940 .000 .000;
-                .000 .940 .000;
-                .000 .000 .940;
+                .940 -0.025 -0.010;
+                .000   .940 -0.010;
+                .000   .000   .940;
             ])
         ),
         n_seeds,
@@ -215,5 +215,81 @@ function similarity_effect()
     plt_asb = plot(mean_asb', ribbon=[lo_asb hi_asb], linecolor=[:blue :red :green], labels=['A' 'S' 'B'], ylim=(0,1))
 
     # plot
-    plot(plt_ab, plt_asb, layout=(1,2))
+    plot(plt_ab, plt_asb, layout=(1,2), title="Similarity effect")
+end
+
+function attraction_effect()
+    max_time = 100
+    n_seeds = 1000
+    attention_process = BernoulliAttentionProcess([.51, .49])
+    measure_ab = Measure(
+        MDFT(
+            2, # alternatives (cars) A B
+            2, # attributes E (economy) and Q (quality)
+            [ # personal evaluation matrix M
+                # E     Q
+                1.00  3.00; # A
+                3.00  1.00; # B
+            ],
+            # attention weight process
+            attention_process,
+            # contrast matrix
+            contrast_matrix(2),
+            # residual error law
+            Dirac(0),
+            sym([ # feedback matrix S
+                .940 .000;
+                .000 .940;
+            ])
+        ),
+        n_seeds,
+        max_time,
+    )
+    measure_adb = Measure(
+        MDFT(
+            3, # alternatives (cars) A D B
+            2, # attributes E (economy) and Q (quality)
+            [ # personal evaluation matrix M
+                # E     Q
+                1.00  3.00; # A
+                0.50  2.50; # D
+                3.00  1.00; # B
+            ],
+            # attention weight process
+            attention_process,
+            # contrast matrix
+            contrast_matrix(3),
+            # residual error law
+            Dirac(0),
+            # sym([ # feedback matrix S
+            #     .940 -0.025 -0.010;
+            #     .000   .940 -0.010;
+            #     .000   .000   .940;
+            # ])
+            sym([ # feedback matrix S
+                .940 -0.050 -0.000;
+                .000   .940 -0.000;
+                .000   .000   .940;
+            ])
+        ),
+        n_seeds,
+        max_time,
+    )
+
+    # AB
+    results_ab = run_measure(measure_ab)
+    mean_ab = map(r -> r.mean, results_ab)
+    lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
+    hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
+    plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
+
+    # ADB
+    results_adb = run_measure(measure_adb)
+    mean_adb = map(r -> r.mean, results_adb)
+    lo_adb = map(r -> r.mean - 0.67*r.std, results_ab)
+    hi_adb = map(r -> r.mean + 0.67*r.std, results_ab)
+    plt_adb = plot(mean_adb', ribbon=[lo_adb hi_adb], linecolor=[:blue :red :green], labels=['A' 'D' 'B'], ylim=(0,1))
+
+    # plot
+    plot(plt_ab, plt_adb, layout=(1,2))
 end

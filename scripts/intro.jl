@@ -1,6 +1,7 @@
 using DrWatson
 @quickactivate "mdft"
 
+using LinearAlgebra
 using Plots
 using NNlib
 using Distributions
@@ -91,6 +92,49 @@ function run(mdft :: MDFT, rule :: StoppingRule) :: Matrix{Float64}
 end
 
 #=
+EXPERIMENT
+=#
+
+struct Measure
+    model :: MDFT
+    n_seeds :: Int
+    max_time :: Int
+end
+
+struct MeasureResult
+    mean :: Float64
+    std :: Float64
+end
+
+function run_measure(measure :: Measure) :: Matrix{MeasureResult}
+    function winner(p :: Vector{Float64}) :: Vector{Float64}
+        probs = softmax(p)
+        w = rand(Categorical(probs))
+        r = zeros(size(p))
+        r[w] = 1
+        r
+    end
+    model = measure.model
+    n_alternatives = model.n_alternatives
+    max_time = measure.max_time
+    n_seeds = measure.n_seeds
+    results = Matrix{MeasureResult}(undef, n_alternatives, max_time)
+    for deadline in 1:max_time
+        s = zeros((n_alternatives,0))
+        for _ in 1:n_seeds
+            history = run(model, DeadlineRule(deadline))
+            p = history[:, end]
+            s = hcat(s, winner(p))
+        end
+        s_mean = mean(s, dims=2)
+        s_std = std(s, dims=2)
+        results[:, deadline] = [MeasureResult(s_mean[a], s_std[a]) for a in 1:n_alternatives]
+    end
+    results
+end
+
+
+#=
 Examples
 =#
 
@@ -104,84 +148,72 @@ function sym(m :: Matrix{Float64}) :: Matrix{Float64}
 end
 
 function similarity_effect()
-    attention_process = BernoulliAttentionProcess([.49, .51])
-    model2 = MDFT(
-        2, # alternatives (cars) A B
-        2, # attributes E (economy) and Q (quality)
-        [ # personal evaluation matrix M
-            # E     Q
-            1.00  3.00; # A
-            3.00  1.00; # B
-        ],
-        # attention weight process
-        attention_process,
-        # contrast matrix
-        contrast_matrix(2),
-        # residual error law
-        Dirac(0),
-        sym([ # feedback matrix S
-            .940 .000;
-            .000 .940;
-        ])
-    )
-    model3 = MDFT(
-        3, # alternatives (cars) A S B
-        2, # attributes E (economy) and Q (quality)
-        [ # personal evaluation matrix M
-            # E     Q
-            1.00  3.00; # A
-            0.99  3.01; # S
-            3.00  1.00; # B
-        ],
-        # attention weight process
-        attention_process,
-        # contrast matrix
-        contrast_matrix(3),
-        # residual error law
-        Dirac(0),
-        sym([ # feedback matrix S
-            .940 .000 .000;
-            .000 .940 .000;
-            .000 .000 .940;
-        ])
-    )
-    function winner(p :: Vector{Float64}) :: Vector{Float64}
-        probs = softmax(p)
-        w = rand(Categorical(probs))
-        r = zeros(size(p))
-        r[w] = 1
-        r
-    end
-
     max_time = 100
     n_seeds = 1000
+    attention_process = BernoulliAttentionProcess([.49, .51])
+    measure_ab = Measure(
+        MDFT(
+            2, # alternatives (cars) A B
+            2, # attributes E (economy) and Q (quality)
+            [ # personal evaluation matrix M
+                # E     Q
+                1.00  3.00; # A
+                3.00  1.00; # B
+            ],
+            # attention weight process
+            attention_process,
+            # contrast matrix
+            contrast_matrix(2),
+            # residual error law
+            Dirac(0),
+            sym([ # feedback matrix S
+                .940 .000;
+                .000 .940;
+            ])
+        ),
+        n_seeds,
+        max_time,
+    )
+    measure_asb = Measure(
+        MDFT(
+            3, # alternatives (cars) A S B
+            2, # attributes E (economy) and Q (quality)
+            [ # personal evaluation matrix M
+                # E     Q
+                1.00  3.00; # A
+                0.99  3.01; # S
+                3.00  1.00; # B
+            ],
+            # attention weight process
+            attention_process,
+            # contrast matrix
+            contrast_matrix(3),
+            # residual error law
+            Dirac(0),
+            sym([ # feedback matrix S
+                .940 .000 .000;
+                .000 .940 .000;
+                .000 .000 .940;
+            ])
+        ),
+        n_seeds,
+        max_time,
+    )
 
-    # model2
-    results = zeros((2, max_time))
-    for deadline in 1:max_time
-        s = zeros((2,0))
-        for _ in 1:n_seeds
-            history = run(model2, DeadlineRule(deadline))
-            p = history[:, end]
-            s = hcat(s, winner(p))
-        end
-        results[:, deadline] = mean(s, dims=2)
-    end
-    plt2 = plot(results', labels=['A' 'B'], linecolor=[:blue :green])
+    # AB
+    results_ab = run_measure(measure_ab)
+    mean_ab = map(r -> r.mean, results_ab)
+    lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
+    hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
+    plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
 
-    # model3
-    results = zeros((3, max_time))
-    for deadline in 1:max_time
-        s = zeros((3,0))
-        for _ in 1:n_seeds
-            history = run(model3, DeadlineRule(deadline))
-            p = history[:, end]
-            s = hcat(s, winner(p))
-        end
-        results[:, deadline] = mean(s, dims=2)
-    end
-    plt3 = plot(results', labels=['A' 'S' 'B'], linecolor=[:blue :red :green])
+    # ASB
+    results_asb = run_measure(measure_asb)
+    mean_asb = map(r -> r.mean, results_asb)
+    lo_asb = map(r -> r.mean - 0.67*r.std, results_ab)
+    hi_asb = map(r -> r.mean + 0.67*r.std, results_ab)
+    plt_asb = plot(mean_asb', ribbon=[lo_asb hi_asb], linecolor=[:blue :red :green], labels=['A' 'S' 'B'], ylim=(0,1))
 
     # plot
-    plot(plt2, plt3, layout=(1,2))
+    plot(plt_ab, plt_asb, layout=(1,2))
 end

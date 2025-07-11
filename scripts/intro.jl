@@ -349,15 +349,15 @@ Due to
 function compromise_effect()
     max_time = 100
     n_seeds = 1000
-    phi1 = 0.0
+    phi1 = 0.1
     phi2 = 0.1
     beta = 10.0
-    attention_process = AttentionProcess(.5) # fair process
+    attention_process = AttentionProcess(.50) 
     error = Normal(0, 0.01)
     M = [ # personal evaluation matrix M
                 # E     Q
                 1.00  3.00; # A
-                2.00  2.00; # C
+                2.50  2.50; # C
                 3.00  1.00; # B
             ]
     measure_ab = Measure(

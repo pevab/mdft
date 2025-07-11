@@ -261,6 +261,7 @@ ATTRACTION EFFECT
 
 Due to
 - lateral inhibition
+- emphasis on the dominance direction (D) in the (I,D) space
 =#
 
 function attraction_effect()
@@ -339,82 +340,89 @@ function attraction_effect()
     plot(scatter_asb, plt_ab, plt_asb, layout=(1,3))
 end
 
+#=
+COMPROMISE EFFECT
 
-# function attraction_effect()
-#     max_time = 100
-#     n_seeds = 1000
-#     attention_process = AttentionProcess([.51, .49])
-#     measure_ab = Measure(
-#         MDFT(
-#             2, # alternatives (cars) A B
-#             2, # attributes E (economy) and Q (quality)
-#             [ # personal evaluation matrix M
-#                 # E     Q
-#                 1.00  3.00; # A
-#                 3.00  1.00; # B
-#             ],
-#             # attention weight process
-#             attention_process,
-#             # contrast matrix
-#             contrast_matrix(2),
-#             # residual error law
-#             Dirac(0),
-#             sym([ # feedback matrix S
-#                 .940 .000;
-#                 .000 .940;
-#             ])
-#         ),
-#         n_seeds,
-#         max_time,
-#     )
-#     measure_adb = Measure(
-#         MDFT(
-#             3, # alternatives (cars) A D B
-#             2, # attributes E (economy) and Q (quality)
-#             [ # personal evaluation matrix M
-#                 # E     Q
-#                 1.00  3.00; # A
-#                 0.50  2.50; # D
-#                 3.00  1.00; # B
-#             ],
-#             # attention weight process
-#             attention_process,
-#             # contrast matrix
-#             contrast_matrix(3),
-#             # residual error law
-#             Dirac(0),
-#             # sym([ # feedback matrix S
-#             #     .940 -0.025 -0.010;
-#             #     .000   .940 -0.010;
-#             #     .000   .000   .940;
-#             # ])
-#             sym([ # feedback matrix S
-#                 .940 -0.050 -0.000;
-#                 .000   .940 -0.000;
-#                 .000   .000   .940;
-#             ])
-#         ),
-#         n_seeds,
-#         max_time,
-#     )
+Due to
+=#
 
-#     # AB
-#     results_ab = run_measure(measure_ab)
-#     mean_ab = map(r -> r.mean, results_ab)
-#     lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
-#     hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
-#     plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
+function compromise_effect()
+    max_time = 100
+    n_seeds = 1000
+    phi1 = 0.0
+    phi2 = 0.1
+    beta = 10.0
+    attention_process = AttentionProcess(.5) # fair process
+    error = Normal(0, 0.01)
+    M = [ # personal evaluation matrix M
+                # E     Q
+                1.00  3.00; # A
+                2.00  2.00; # C
+                3.00  1.00; # B
+            ]
+    measure_ab = Measure(
+        MDFT(
+            2,
+            phi1,
+            phi2,
+            beta,
+            M[[1,3],:],
+            attention_process,
+            error,
+        ),
+        n_seeds,
+        max_time,
+    )
+    measure_asb = Measure(
+        MDFT(
+            3,
+            phi1,
+            phi2,
+            beta,
+            M,
+            attention_process,
+            error,
+        ),
+        n_seeds,
+        max_time,
+    )
 
-#     # ADB
-#     results_adb = run_measure(measure_adb)
-#     mean_adb = map(r -> r.mean, results_adb)
-#     lo_adb = map(r -> r.mean - 0.67*r.std, results_ab)
-#     hi_adb = map(r -> r.mean + 0.67*r.std, results_ab)
-#     plt_adb = plot(mean_adb', ribbon=[lo_adb hi_adb], linecolor=[:blue :red :green], labels=['A' 'D' 'B'], ylim=(0,1))
+    # Alternatives scatter plot
+    scatter_asb = plot()
+    scatter!(M[:,1]', M[:, 2]', title="Alternatives", 
+        legend=true, 
+        label=["A" "C" "B"], 
+        color=[:blue :red :green], 
+        xlim=(0,3.5), ylim=(0, 3.5),
+        alpha=0.5)
 
-#     # plot
-#     plot(plt_ab, plt_adb, layout=(1,2))
-# end
+    # AB
+    results_ab = run_measure(measure_ab)
+    mean_ab = map(r -> r.mean, results_ab)
+    std_ab = map(r -> r.std, results_ab)
+    plt_ab = plot(title="Control")
+    colors_ab = [:blue :green]
+    labels_ab = ['A' 'B']
+    for i in 1:2
+        plot!(mean_ab[i, :], ribbon=0.67 * std_ab[i, :], linecolor=colors_ab[i], label=labels_ab[i], ylim=(0,1))
+    end
+
+    # ASB
+    results_asb = run_measure(measure_asb)
+    mean_asb = map(r -> r.mean, results_asb)
+    std_asb = map(r -> r.std, results_asb)
+    plt_asb = plot(title="Compromise")
+    colors_asb = [:blue :red :green]
+    labels_asb = ['A' 'C' 'B']
+    for i in 1:3
+        plot!(mean_asb[i, :], ribbon=0.67 * std_asb[i, :], linecolor=colors_asb[i], label=labels_asb[i], ylim=(0,1))
+    end
+
+    # plot
+    plot(scatter_asb, plt_ab, plt_asb, layout=(1,3))
+end
+
+
 
 # function compromise_effect()
 #     max_time = 200

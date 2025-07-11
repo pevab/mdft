@@ -344,6 +344,8 @@ end
 COMPROMISE EFFECT
 
 Due to
+- the compromise is slightly higher in the dominant direction than the exact middle option
+- lateral inhibition
 =#
 
 function compromise_effect()

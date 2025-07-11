@@ -6,38 +6,68 @@ using Plots
 using NNlib
 using Distributions
 
+#= -- MDFT
+We focus on 2 attributes each.
+=#
+
 #=
 ATTENTION PROCESSES
 =#
 
-abstract type  AttentionProcess
+struct AttentionProcess
+    p :: Float64
 end
 
-struct BernoulliAttentionProcess <: AttentionProcess
-    probs :: Vector{Float64}
-end
-
-function next(process :: BernoulliAttentionProcess) :: Vector{Float64}
-    probs = process.probs
-    n_attributes = length(probs)
-    focus = rand(Categorical(probs))
-    result = zeros(n_attributes)
-    result[focus] = 1
-    result
+function next(process :: AttentionProcess) :: Vector{Float64}
+    p = process.p
+    we = rand(Bernoulli(p))
+    wq = rand(Bernoulli(1 - p))
+    [we, wq]
 end
 
 #=
 MDFT STRUCTURE
 =#
 
+
 struct MDFT 
-    n_alternatives :: Int64
-    n_attributes :: Int64
-    personal_evaluation_matrix :: Matrix{Float64}
+    n_alternatives :: Int
+    phi1 :: Float64
+    phi2 :: Float64
+    beta :: Float64
+    evaluation_matrix :: Matrix{Float64} # alternatives x attributes = alternatives x {economy, quality}
     attention_process :: AttentionProcess
-    contrast_matrix :: Matrix{Float64}
     residual_error_law :: Distribution
-    feedback_matrix :: Matrix{Float64}
+end
+
+function psy_dist2(mdft :: MDFT, a :: Int, b :: Int )
+    m = mdft.evaluation_matrix
+    de = m[a, 1] - m[b, 1]
+    dq = m[a, 2] - m[b, 2]
+    di = (de - dq)/sqrt(2)
+    dd = (de + dq)/sqrt(2)
+    di^2 + mdft.beta * dd^2
+end
+
+function contrast_matrix(mdft :: MDFT) :: Matrix{Float64}
+    n = mdft.n_alternatives
+    f = 1 / (n - 1)
+    (1 + f) * Matrix(I, n, n) - f * ones((n, n))
+end
+
+function feedback_matrix(mdft :: MDFT) :: Matrix{Float64}
+    n = mdft.n_alternatives
+    phi1 = mdft.phi1
+    phi2 = mdft.phi2
+    F = zeros(n,n)
+    for i in 1:n
+        for j in 1:n
+            if i != j
+                F[i,j] = phi2 * exp(phi1 * psy_dist2(mdft, i, j))
+            end
+        end
+    end
+    Matrix(I, n, n) - F
 end
 
 #=
@@ -75,14 +105,14 @@ function run(mdft :: MDFT, rule :: StoppingRule) :: Matrix{Float64}
     n_alternatives = mdft.n_alternatives
     history = zeros((n_alternatives, 1))
     previous = history[:, end]
-    feedback_matrix = mdft.feedback_matrix
-    contrast_matrix = mdft.contrast_matrix
-    personal_evaluation_matrix = mdft.personal_evaluation_matrix
+    S = feedback_matrix(mdft)
+    C = contrast_matrix(mdft)
+    M = mdft.evaluation_matrix
     while !should_stop(rule, history)
         # new value
-        attention_weights = next(mdft.attention_process)
+        W = next(mdft.attention_process)
         residual = rand(mdft.residual_error_law, n_alternatives)
-        current = feedback_matrix * previous + contrast_matrix * personal_evaluation_matrix * attention_weights + residual
+        current = S * previous + C * M * W + residual
 
         # push
         history = hcat(history, current)
@@ -108,8 +138,11 @@ end
 
 function run_measure(measure :: Measure) :: Matrix{MeasureResult}
     function winner(p :: Vector{Float64}) :: Vector{Float64}
-        probs = softmax(p)
-        w = rand(Categorical(probs))
+        _, w = findmax(p)
+        # probs = softmax(p)
+        # w = rand(Categorical(probs))
+        
+        # one-hot encoding
         r = zeros(size(p))
         r[w] = 1
         r
@@ -138,234 +171,320 @@ end
 Examples
 =#
 
-function contrast_matrix(n_alternatives) :: Matrix{Float64}
-    f = 1/(n_alternatives - 1)
-    (1 + f) * Matrix(I, n_alternatives, n_alternatives) - f * ones((n_alternatives, n_alternatives))
-end
+#=
+SIMILARITY EFFECT
 
-function sym(m :: Matrix{Float64}) :: Matrix{Float64}
-    (m + m')/2
-end
+Due to
+- more attention on the attribute Q (more favorable to A)
+- contrast matrix
+No lateral inhibition.
+=#
 
 function similarity_effect()
     max_time = 100
     n_seeds = 1000
-    attention_process = BernoulliAttentionProcess([.49, .51])
-    measure_ab = Measure(
-        MDFT(
-            2, # alternatives (cars) A B
-            2, # attributes E (economy) and Q (quality)
-            [ # personal evaluation matrix M
+    phi1 = 0.0
+    phi2 = 0.1
+    beta = 2.0
+    attention_process = AttentionProcess(.49) # small advantage for quality Q
+    error = Normal(0, 0.01)
+    M = [ # personal evaluation matrix M
                 # E     Q
                 1.00  3.00; # A
+                0.99  3.01; # S
                 3.00  1.00; # B
-            ],
-            # attention weight process
+            ]
+    measure_ab = Measure(
+        MDFT(
+            2,
+            phi1,
+            phi2,
+            beta,
+            M[[1,3],:],
             attention_process,
-            # contrast matrix
-            contrast_matrix(2),
-            # residual error law
-            Dirac(0),
-            sym([ # feedback matrix S
-                .940 .000;
-                .000 .940;
-            ])
+            error,
         ),
         n_seeds,
         max_time,
     )
     measure_asb = Measure(
         MDFT(
-            3, # alternatives (cars) A S B
-            2, # attributes E (economy) and Q (quality)
-            [ # personal evaluation matrix M
-                # E     Q
-                1.00  3.00; # A
-                0.99  3.01; # S
-                3.00  1.00; # B
-            ],
-            # attention weight process
+            3,
+            phi1,
+            phi2,
+            beta,
+            M,
             attention_process,
-            # contrast matrix
-            contrast_matrix(3),
-            # residual error law
-            Dirac(0),
-            sym([ # feedback matrix S
-                .940 -0.025 -0.010;
-                .000   .940 -0.010;
-                .000   .000   .940;
-            ])
+            error,
         ),
         n_seeds,
         max_time,
     )
 
+    # Alternatives scatter plot
+    scatter_asb = plot()
+    scatter!(M[:,1]', M[:, 2]', title="Alternatives", 
+        legend=true, 
+        label=["A" "S" "B"], 
+        color=[:blue :red :green], 
+        xlim=(0,3.5), ylim=(0, 3.5),
+        alpha=0.5)
+
     # AB
     results_ab = run_measure(measure_ab)
     mean_ab = map(r -> r.mean, results_ab)
-    lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
-    hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
-    plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
+    std_ab = map(r -> r.std, results_ab)
+    plt_ab = plot(title="Control")
+    colors_ab = [:blue :green]
+    labels_ab = ['A' 'B']
+    for i in 1:2
+        plot!(mean_ab[i, :], ribbon=0.67 * std_ab[i, :], linecolor=colors_ab[i], label=labels_ab[i], ylim=(0,1))
+    end
 
     # ASB
     results_asb = run_measure(measure_asb)
     mean_asb = map(r -> r.mean, results_asb)
-    lo_asb = map(r -> r.mean - 0.67*r.std, results_ab)
-    hi_asb = map(r -> r.mean + 0.67*r.std, results_ab)
-    plt_asb = plot(mean_asb', ribbon=[lo_asb hi_asb], linecolor=[:blue :red :green], labels=['A' 'S' 'B'], ylim=(0,1))
+    std_asb = map(r -> r.std, results_asb)
+    plt_asb = plot(title="Similarity")
+    colors_asb = [:blue :red :green]
+    labels_asb = ['A' 'S' 'B']
+    for i in 1:3
+        plot!(mean_asb[i, :], ribbon=0.67 * std_asb[i, :], linecolor=colors_asb[i], label=labels_asb[i], ylim=(0,1))
+    end
 
     # plot
-    plot(plt_ab, plt_asb, layout=(1,2), title="Similarity effect")
+    plot(scatter_asb, plt_ab, plt_asb, layout=(1,3))
 end
+
+#=
+ATTRACTION EFFECT
+=#
 
 function attraction_effect()
     max_time = 100
     n_seeds = 1000
-    attention_process = BernoulliAttentionProcess([.51, .49])
-    measure_ab = Measure(
-        MDFT(
-            2, # alternatives (cars) A B
-            2, # attributes E (economy) and Q (quality)
-            [ # personal evaluation matrix M
-                # E     Q
-                1.00  3.00; # A
-                3.00  1.00; # B
-            ],
-            # attention weight process
-            attention_process,
-            # contrast matrix
-            contrast_matrix(2),
-            # residual error law
-            Dirac(0),
-            sym([ # feedback matrix S
-                .940 .000;
-                .000 .940;
-            ])
-        ),
-        n_seeds,
-        max_time,
-    )
-    measure_adb = Measure(
-        MDFT(
-            3, # alternatives (cars) A D B
-            2, # attributes E (economy) and Q (quality)
-            [ # personal evaluation matrix M
+    phi1 = 0.1
+    phi2 = 0.1
+    beta = 2.0
+    attention_process = AttentionProcess(.48) # small advantage for quality Q
+    error = Normal(0, 0.01)
+    M = [ # personal evaluation matrix M
                 # E     Q
                 1.00  3.00; # A
                 0.50  2.50; # D
                 3.00  1.00; # B
-            ],
-            # attention weight process
-            attention_process,
-            # contrast matrix
-            contrast_matrix(3),
-            # residual error law
-            Dirac(0),
-            # sym([ # feedback matrix S
-            #     .940 -0.025 -0.010;
-            #     .000   .940 -0.010;
-            #     .000   .000   .940;
-            # ])
-            sym([ # feedback matrix S
-                .940 -0.050 -0.000;
-                .000   .940 -0.000;
-                .000   .000   .940;
-            ])
-        ),
-        n_seeds,
-        max_time,
-    )
-
-    # AB
-    results_ab = run_measure(measure_ab)
-    mean_ab = map(r -> r.mean, results_ab)
-    lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
-    hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
-    plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
-
-    # ADB
-    results_adb = run_measure(measure_adb)
-    mean_adb = map(r -> r.mean, results_adb)
-    lo_adb = map(r -> r.mean - 0.67*r.std, results_ab)
-    hi_adb = map(r -> r.mean + 0.67*r.std, results_ab)
-    plt_adb = plot(mean_adb', ribbon=[lo_adb hi_adb], linecolor=[:blue :red :green], labels=['A' 'D' 'B'], ylim=(0,1))
-
-    # plot
-    plot(plt_ab, plt_adb, layout=(1,2))
-end
-
-function compromise_effect()
-    max_time = 200
-    n_seeds = 1000
-    attention_process = BernoulliAttentionProcess([.50, .50])
+            ]
     measure_ab = Measure(
         MDFT(
-            2, # alternatives (cars) A B
-            2, # attributes E (economy) and Q (quality)
-            [ # personal evaluation matrix M
-                # E     Q
-                1.00  3.00; # A
-                3.00  1.00; # B
-            ],
-            # attention weight process
+            2,
+            phi1,
+            phi2,
+            beta,
+            M[[1,3],:],
             attention_process,
-            # contrast matrix
-            contrast_matrix(2),
-            # residual error law
-            Dirac(0),
-            sym([ # feedback matrix S
-                .940 .000;
-                .000 .940;
-            ])
+            error,
         ),
         n_seeds,
         max_time,
     )
-    measure_acb = Measure(
+    measure_asb = Measure(
         MDFT(
-            3, # alternatives (cars) A C B
-            2, # attributes E (economy) and Q (quality)
-            [ # personal evaluation matrix M
-                # E     Q
-                1.00  3.00; # A
-                2.00  2.00; # C
-                3.00  1.00; # B
-            ],
-            # attention weight process
+            3,
+            phi1,
+            phi2,
+            beta,
+            M,
             attention_process,
-            # contrast matrix
-            contrast_matrix(3),
-            # residual error law
-            Dirac(0),
-            # sym([ # feedback matrix S
-            #     .940 -0.025 -0.010;
-            #     .000   .940 -0.010;
-            #     .000   .000   .940;
-            # ])
-            sym([ # feedback matrix S
-                .940 -0.200 -0.000;
-                .000   .940 -0.199;
-                .000   .000   .940;
-            ])
+            error,
         ),
         n_seeds,
         max_time,
     )
+
+    # Alternatives scatter plot
+    scatter_asb = plot()
+    scatter!(M[:,1]', M[:, 2]', title="Alternatives", 
+        legend=true, 
+        label=["A" "D" "B"], 
+        color=[:blue :red :green], 
+        xlim=(0,3.5), ylim=(0, 3.5),
+        alpha=0.5)
 
     # AB
     results_ab = run_measure(measure_ab)
     mean_ab = map(r -> r.mean, results_ab)
-    lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
-    hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
-    plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
+    std_ab = map(r -> r.std, results_ab)
+    plt_ab = plot(title="Control")
+    colors_ab = [:blue :green]
+    labels_ab = ['A' 'B']
+    for i in 1:2
+        plot!(mean_ab[i, :], ribbon=0.67 * std_ab[i, :], linecolor=colors_ab[i], label=labels_ab[i], ylim=(0,1))
+    end
 
-    # ACB
-    results_acb = run_measure(measure_acb)
-    mean_acb = map(r -> r.mean, results_acb)
-    lo_acb = map(r -> r.mean - 0.67*r.std, results_ab)
-    hi_acb = map(r -> r.mean + 0.67*r.std, results_ab)
-    plt_acb = plot(mean_acb', ribbon=[lo_acb hi_acb], linecolor=[:blue :red :green], labels=['A' 'C' 'B'], ylim=(0,1))
+    # ASB
+    results_asb = run_measure(measure_asb)
+    mean_asb = map(r -> r.mean, results_asb)
+    std_asb = map(r -> r.std, results_asb)
+    plt_asb = plot(title="Attraction")
+    colors_asb = [:blue :red :green]
+    labels_asb = ['A' 'D' 'B']
+    for i in 1:3
+        plot!(mean_asb[i, :], ribbon=0.67 * std_asb[i, :], linecolor=colors_asb[i], label=labels_asb[i], ylim=(0,1))
+    end
 
     # plot
-    plot(plt_ab, plt_acb, layout=(1,2))
+    plot(scatter_asb, plt_ab, plt_asb, layout=(1,3))
 end
+
+
+# function attraction_effect()
+#     max_time = 100
+#     n_seeds = 1000
+#     attention_process = AttentionProcess([.51, .49])
+#     measure_ab = Measure(
+#         MDFT(
+#             2, # alternatives (cars) A B
+#             2, # attributes E (economy) and Q (quality)
+#             [ # personal evaluation matrix M
+#                 # E     Q
+#                 1.00  3.00; # A
+#                 3.00  1.00; # B
+#             ],
+#             # attention weight process
+#             attention_process,
+#             # contrast matrix
+#             contrast_matrix(2),
+#             # residual error law
+#             Dirac(0),
+#             sym([ # feedback matrix S
+#                 .940 .000;
+#                 .000 .940;
+#             ])
+#         ),
+#         n_seeds,
+#         max_time,
+#     )
+#     measure_adb = Measure(
+#         MDFT(
+#             3, # alternatives (cars) A D B
+#             2, # attributes E (economy) and Q (quality)
+#             [ # personal evaluation matrix M
+#                 # E     Q
+#                 1.00  3.00; # A
+#                 0.50  2.50; # D
+#                 3.00  1.00; # B
+#             ],
+#             # attention weight process
+#             attention_process,
+#             # contrast matrix
+#             contrast_matrix(3),
+#             # residual error law
+#             Dirac(0),
+#             # sym([ # feedback matrix S
+#             #     .940 -0.025 -0.010;
+#             #     .000   .940 -0.010;
+#             #     .000   .000   .940;
+#             # ])
+#             sym([ # feedback matrix S
+#                 .940 -0.050 -0.000;
+#                 .000   .940 -0.000;
+#                 .000   .000   .940;
+#             ])
+#         ),
+#         n_seeds,
+#         max_time,
+#     )
+
+#     # AB
+#     results_ab = run_measure(measure_ab)
+#     mean_ab = map(r -> r.mean, results_ab)
+#     lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
+#     hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
+#     plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
+
+#     # ADB
+#     results_adb = run_measure(measure_adb)
+#     mean_adb = map(r -> r.mean, results_adb)
+#     lo_adb = map(r -> r.mean - 0.67*r.std, results_ab)
+#     hi_adb = map(r -> r.mean + 0.67*r.std, results_ab)
+#     plt_adb = plot(mean_adb', ribbon=[lo_adb hi_adb], linecolor=[:blue :red :green], labels=['A' 'D' 'B'], ylim=(0,1))
+
+#     # plot
+#     plot(plt_ab, plt_adb, layout=(1,2))
+# end
+
+# function compromise_effect()
+#     max_time = 200
+#     n_seeds = 1000
+#     attention_process = AttentionProcess([.50, .50])
+#     measure_ab = Measure(
+#         MDFT(
+#             2, # alternatives (cars) A B
+#             2, # attributes E (economy) and Q (quality)
+#             [ # personal evaluation matrix M
+#                 # E     Q
+#                 1.00  3.00; # A
+#                 3.00  1.00; # B
+#             ],
+#             # attention weight process
+#             attention_process,
+#             # contrast matrix
+#             contrast_matrix(2),
+#             # residual error law
+#             Dirac(0),
+#             sym([ # feedback matrix S
+#                 .940 .000;
+#                 .000 .940;
+#             ])
+#         ),
+#         n_seeds,
+#         max_time,
+#     )
+#     measure_acb = Measure(
+#         MDFT(
+#             3, # alternatives (cars) A C B
+#             2, # attributes E (economy) and Q (quality)
+#             [ # personal evaluation matrix M
+#                 # E     Q
+#                 1.00  3.00; # A
+#                 2.00  2.00; # C
+#                 3.00  1.00; # B
+#             ],
+#             # attention weight process
+#             attention_process,
+#             # contrast matrix
+#             contrast_matrix(3),
+#             # residual error law
+#             Dirac(0),
+#             # sym([ # feedback matrix S
+#             #     .940 -0.025 -0.010;
+#             #     .000   .940 -0.010;
+#             #     .000   .000   .940;
+#             # ])
+#             sym([ # feedback matrix S
+#                 .940 -0.200 -0.000;
+#                 .000   .940 -0.199;
+#                 .000   .000   .940;
+#             ])
+#         ),
+#         n_seeds,
+#         max_time,
+#     )
+
+#     # AB
+#     results_ab = run_measure(measure_ab)
+#     mean_ab = map(r -> r.mean, results_ab)
+#     lo_ab = map(r -> r.mean - 0.67*r.std, results_ab)
+#     hi_ab = map(r -> r.mean + 0.67*r.std, results_ab)
+#     plt_ab = plot(mean_ab', ribbon=[lo_ab hi_ab], linecolor=[:blue :green], labels=['A' 'B'], ylim=(0,1))
+
+#     # ACB
+#     results_acb = run_measure(measure_acb)
+#     mean_acb = map(r -> r.mean, results_acb)
+#     lo_acb = map(r -> r.mean - 0.67*r.std, results_ab)
+#     hi_acb = map(r -> r.mean + 0.67*r.std, results_ab)
+#     plt_acb = plot(mean_acb', ribbon=[lo_acb hi_acb], linecolor=[:blue :red :green], labels=['A' 'C' 'B'], ylim=(0,1))
+
+#     # plot
+#     plot(plt_ab, plt_acb, layout=(1,2))
+# end

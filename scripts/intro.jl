@@ -186,7 +186,7 @@ function similarity_effect()
     phi1 = 0.0
     phi2 = 0.1
     beta = 2.0
-    attention_process = AttentionProcess(.49) # small advantage for quality Q
+    attention_process = AttentionProcess(.49)
     error = Normal(0, 0.01)
     M = [ # personal evaluation matrix M
                 # E     Q
@@ -267,10 +267,10 @@ Due to
 function attraction_effect()
     max_time = 100
     n_seeds = 1000
-    phi1 = 0.1
+    phi1 = 1
     phi2 = 0.1
-    beta = 2.0
-    attention_process = AttentionProcess(.50) # small advantage for quality Q
+    beta = 5.0
+    attention_process = AttentionProcess(.6)
     error = Normal(0, 0.01)
     M = [ # personal evaluation matrix M
                 # E     Q

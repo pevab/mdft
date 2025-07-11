@@ -260,20 +260,21 @@ end
 ATTRACTION EFFECT
 
 Due to
+- lateral inhibition
 =#
 
 function attraction_effect()
     max_time = 100
     n_seeds = 1000
-    phi1 = 0.5
+    phi1 = 0.1
     phi2 = 0.1
-    beta = 100.0
-    attention_process = AttentionProcess(.51) # advantage for E (more favorable for B)
+    beta = 10.0
+    attention_process = AttentionProcess(.6) # advantage for E (more favorable for B)
     error = Normal(0, 0.01)
     M = [ # personal evaluation matrix M
                 # E     Q
                 1.00  3.00; # A
-                0.50  2.50; # D
+                0.50  0.50; # D
                 3.00  1.00; # B
             ]
     measure_ab = Measure(

@@ -258,6 +258,10 @@ end
 
 #=
 ATTRACTION EFFECT
+
+Due to
+- leakage (phi1)
+- psychological distance
 =#
 
 function attraction_effect()
@@ -266,7 +270,7 @@ function attraction_effect()
     phi1 = 0.1
     phi2 = 0.1
     beta = 2.0
-    attention_process = AttentionProcess(.48) # small advantage for quality Q
+    attention_process = AttentionProcess(.50) # small advantage for quality Q
     error = Normal(0, 0.01)
     M = [ # personal evaluation matrix M
                 # E     Q

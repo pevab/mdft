@@ -260,17 +260,15 @@ end
 ATTRACTION EFFECT
 
 Due to
-- leakage (phi1)
-- psychological distance
 =#
 
 function attraction_effect()
     max_time = 100
     n_seeds = 1000
-    phi1 = 1
+    phi1 = 0.5
     phi2 = 0.1
-    beta = 5.0
-    attention_process = AttentionProcess(.6)
+    beta = 100.0
+    attention_process = AttentionProcess(.51) # advantage for E (more favorable for B)
     error = Normal(0, 0.01)
     M = [ # personal evaluation matrix M
                 # E     Q

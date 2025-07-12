@@ -129,50 +129,36 @@ EXAMPLES
 =#
 
 #=
-SIMILARITY EFFECT
+ATTRACTION EFFECT
 =#
 
-function similarity_effect()
+function attraction_effect()
     min_threshold = 0.0
     max_threshold = 10.0
     n_steps = 100
     n_seeds = 1000
     w_e = 0.5
-    phi = 100.0
+    phi = 1e0
     beta = 10.0
-    gamma = 0.1
-    obj_m = [ # objective evaluation matrix
-                # E     Q
-                1.00  3.00; # A
-                0.50  1.50; # S
-                3.00  1.00; # B
-    ]
+    gamma = 1e-1
     A = 0.001
     s = 0.001
-    measure_ab = Measure(
-        MLBA(
-            2,
-            w_e,
-            phi,
-            beta,
-            gamma,
-            obj_m[[1,3], :],
-            A,
-            s
-        ),
-        n_seeds,
-        min_threshold,
-        max_threshold,
-        n_steps,
-    )
-    measure_asb = Measure(
+
+    # MEASURE 1
+    obj_m1 = [ # objective evaluation matrix
+                # E     Q
+                1.00  3.00; # A
+                0.60  2.60; # S
+                3.00  1.00; # B
+    ]
+    measure_1 = Measure(
         MLBA(
             3,
             w_e,
             phi,
             beta,
             gamma,
-            obj_m,
+            obj_m1,
             A,
             s
         ),
@@ -182,37 +168,68 @@ function similarity_effect()
         n_steps,
     )
 
-    # Alternatives scatter plot
-    scatter_asb = plot()
-    scatter!(obj_m[:,1]', obj_m[:, 2]', title="Alternatives", 
+    # MEASURE 2
+    obj_m2 = [ # objective evaluation matrix
+                # E     Q
+                1.00  3.00; # A
+                2.60  0.60; # S
+                3.00  1.00; # B
+    ]
+    measure_2 = Measure(
+        MLBA(
+            3,
+            w_e,
+            phi,
+            beta,
+            gamma,
+            obj_m2,
+            A,
+            s
+        ),
+        n_seeds,
+        min_threshold,
+        max_threshold,
+        n_steps,
+    )
+
+    # Plot measure 1
+    scatter_1 = plot()
+    scatter!(obj_m1[:,1]', obj_m1[:, 2]', title="Alternatives", 
         legend=true, 
-        label=["A" "S" "B"], 
+        label=["A" "DA" "B"], 
         color=[:blue :red :green], 
         xlim=(0,3.5), ylim=(0, 3.5),
         alpha=0.5)
 
-    # AB
-    results_ab = run_measure(measure_ab)
-    mean_ab = map(r -> r.mean, results_ab)
-    std_ab = map(r -> r.std, results_ab)
-    plt_ab = plot(title="Control")
-    colors_ab = [:blue :green]
-    labels_ab = ['A' 'B']
-    for i in 1:2
-        plot!(range(min_threshold, max_threshold, n_steps), mean_ab[i, :], ribbon=0.67 * std_ab[i, :], linecolor=colors_ab[i], label=labels_ab[i], ylim=(0,1))
+    results_1 = run_measure(measure_1)
+    mean_1 = map(r -> r.mean, results_1)
+    std_1 = map(r -> r.std, results_1)
+    plt_1 = plot(title="Attraction/A")
+    colors_1 = [:blue :red :green]
+    labels_1 = ["A" "DA" "B"]
+    for i in 1:3
+        plot!(range(min_threshold, max_threshold, n_steps), mean_1[i, :], ribbon=0.67 * std_1[i, :], linecolor=colors_1[i], label=labels_1[i], ylim=(0,1))
     end
 
-    # ASB
-    results_asb = run_measure(measure_asb)
-    mean_asb = map(r -> r.mean, results_asb)
-    std_asb = map(r -> r.std, results_asb)
-    plt_asb = plot(title="Similarity")
-    colors_asb = [:blue :red :green]
-    labels_asb = ['A' 'S' 'B']
+    # Plot measure 2
+    scatter_2 = plot()
+    scatter!(obj_m2[:,1]', obj_m2[:, 2]', title="Alternatives", 
+        legend=true, 
+        label=["A" "DB" "B"], 
+        color=[:blue :red :green], 
+        xlim=(0,3.5), ylim=(0, 3.5),
+        alpha=0.5)
+
+    results_2 = run_measure(measure_2)
+    mean_2 = map(r -> r.mean, results_2)
+    std_2 = map(r -> r.std, results_2)
+    plt_2 = plot(title="Attraction/B")
+    colors_2 = [:blue :red :green]
+    labels_2 = ["A" "DB" "B"]
     for i in 1:3
-        plot!(range(min_threshold, max_threshold, n_steps), mean_asb[i, :], ribbon=0.67 * std_asb[i, :], linecolor=colors_asb[i], label=labels_asb[i], ylim=(0,1))
+        plot!(range(min_threshold, max_threshold, n_steps), mean_2[i, :], ribbon=0.67 * std_2[i, :], linecolor=colors_2[i], label=labels_2[i], ylim=(0,1))
     end
 
     # plot
-    plot(scatter_asb, plt_ab, plt_asb, layout=(1,3))
+    plot(scatter_1, scatter_2, plt_1, plt_2, layout=(2,2))
 end

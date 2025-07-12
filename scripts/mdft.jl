@@ -168,7 +168,7 @@ end
 
 
 #=
-Examples
+EXAMPLES
 =#
 
 #=
